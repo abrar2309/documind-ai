@@ -1,0 +1,79 @@
+name: DocuMind AWS deployment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: documind-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push immutable images
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }}
+          FRONTEND_REPOSITORY: ${{ vars.ECR_FRONTEND_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f backend/Dockerfile.production -t "$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG" ./backend
+          docker build --build-arg VITE_API_BASE_URL=/api/v1 -t "$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG" ./frontend
+          docker push "$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
+          echo "BACKEND_IMAGE=$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Register backend task definition
+        id: backend-task
+        run: |
+          aws ecs describe-task-definition --task-definition "${{ vars.ECS_BACKEND_TASK_FAMILY }}" --query taskDefinition --output json > backend-task.json
+          jq --arg IMAGE "$BACKEND_IMAGE" '.containerDefinitions[0].image=$IMAGE | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' backend-task.json > backend-task-new.json
+          ARN=$(aws ecs register-task-definition --cli-input-json file://backend-task-new.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Register worker task definition
+        id: worker-task
+        run: |
+          aws ecs describe-task-definition --task-definition "${{ vars.ECS_WORKER_TASK_FAMILY }}" --query taskDefinition --output json > worker-task.json
+          jq --arg IMAGE "$BACKEND_IMAGE" '.containerDefinitions[0].image=$IMAGE | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' worker-task.json > worker-task-new.json
+          ARN=$(aws ecs register-task-definition --cli-input-json file://worker-task-new.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Register frontend task definition
+        id: frontend-task
+        run: |
+          aws ecs describe-task-definition --task-definition "${{ vars.ECS_FRONTEND_TASK_FAMILY }}" --query taskDefinition --output json > frontend-task.json
+          jq --arg IMAGE "$FRONTEND_IMAGE" '.containerDefinitions[0].image=$IMAGE | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' frontend-task.json > frontend-task-new.json
+          ARN=$(aws ecs register-task-definition --cli-input-json file://frontend-task-new.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy ECS services
+        env:
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          BACKEND_SERVICE: ${{ vars.ECS_BACKEND_SERVICE }}
+          WORKER_SERVICE: ${{ vars.ECS_WORKER_SERVICE }}
+          FRONTEND_SERVICE: ${{ vars.ECS_FRONTEND_SERVICE }}
+        run: |
+          aws ecs update-service --cluster "$CLUSTER" --service "$BACKEND_SERVICE" --task-definition "${{ steps.backend-task.outputs.arn }}" >/dev/null
+          aws ecs update-service --cluster "$CLUSTER" --service "$WORKER_SERVICE" --task-definition "${{ steps.worker-task.outputs.arn }}" >/dev/null
+          aws ecs update-service --cluster "$CLUSTER" --service "$FRONTEND_SERVICE" --task-definition "${{ steps.frontend-task.outputs.arn }}" >/dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$BACKEND_SERVICE" "$WORKER_SERVICE" "$FRONTEND_SERVICE"

@@ -1,0 +1,19 @@
+aws_region                 = "ap-south-1"
+vpc_id                     = "vpc-REPLACE"
+public_subnet_ids          = ["subnet-PUBLIC1", "subnet-PUBLIC2"]
+private_subnet_ids         = ["subnet-PRIVATE1", "subnet-PRIVATE2"]
+acm_certificate_arn        = "arn:aws:acm:ap-south-1:ACCOUNT:certificate/REPLACE"
+backend_image              = "ACCOUNT.dkr.ecr.ap-south-1.amazonaws.com/documind-backend:IMMUTABLE_TAG"
+frontend_image             = "ACCOUNT.dkr.ecr.ap-south-1.amazonaws.com/documind-frontend:IMMUTABLE_TAG"
+database_url_secret_arn    = "arn:aws:secretsmanager:ap-south-1:ACCOUNT:secret:documind/database-REPLACE"
+jwt_secret_arn             = "arn:aws:secretsmanager:ap-south-1:ACCOUNT:secret:documind/jwt-REPLACE"
+cors_allowed_origins       = "https://app.example.com"
+trusted_hosts              = "app.example.com,api.example.com"
+kafka_bootstrap_servers    = "REPLACE_WITH_PRIVATE_MSK_BOOTSTRAP"
+redis_url_secret_arn      = "arn:aws:secretsmanager:ap-south-1:ACCOUNT:secret:documind/redis-url-REPLACE"
+embedding_provider         = "openai"
+chat_provider              = "openai"
+# Add OPENAI_API_KEY as an extra secret only if using OpenAI providers.
+extra_runtime_secrets = [
+  # { name = "OPENAI_API_KEY", valueFrom = "arn:aws:secretsmanager:..." }
+]

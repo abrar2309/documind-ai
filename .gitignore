@@ -1,0 +1,54 @@
+.env
+.venv/
+**/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+node_modules/
+
+# Terraform state and local deployment variables
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+
+# Local document data and generated reports
+storage/
+*.sqlite
+*.db
+
+# Local backups - preserve on disk, never commit
+/backups/
+/stage2-backup-*/
+
+# Local document storage
+/storage/
+
+# Diagnostic exports and temporary source snapshots
+/DOCUMIND_*.txt
+/STAGE*_*.txt
+/DocuMind_Stage*_*.ps1
+
+# Editor and patch backup files
+*.bak
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local credentials and private keys
+*.pem
+*.key
+secrets/

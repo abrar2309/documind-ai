@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+pydantic-settings
+SQLAlchemy[asyncio]>=2
+alembic
+psycopg[binary]
+pgvector
+pwdlib[argon2]
+PyJWT
+email-validator
+httpx
+pytest
+python-multipart
+pypdf
+aiokafka>=0.12,<1
+redis>=5.0,<7
