@@ -182,6 +182,31 @@ async def send_dlq(producer: AIOKafkaProducer, event: Any, error: str, attempts:
     await add_metric("worker.dlq.sent", 1)
 
 
+async def start_kafka_clients(producer: AIOKafkaProducer, consumer: AIOKafkaConsumer, stop: asyncio.Event) -> None:
+    """Retry transient broker outages instead of crashing the worker on startup."""
+    delay = 2.0
+    while not stop.is_set():
+        producer_started = False
+        try:
+            await producer.start()
+            producer_started = True
+            await consumer.start()
+            logger.info("Kafka producer and consumer connected")
+            return
+        except Exception:
+            logger.exception("Kafka unavailable during worker startup; retrying in %.1fs", delay)
+            if producer_started:
+                try:
+                    await producer.stop()
+                except Exception:
+                    logger.warning("Could not stop partially started producer", exc_info=True)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=delay)
+            except asyncio.TimeoutError:
+                pass
+            delay = min(30.0, delay * 2.0)
+    raise asyncio.CancelledError("Worker shutdown requested before Kafka became available")
+
 async def main() -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -207,12 +232,11 @@ async def main() -> None:
         acks="all",
         enable_idempotence=True,
     )
-    await producer.start()
-    await consumer.start()
-    outbox_task = asyncio.create_task(outbox_loop(producer, stop))
-    logger.info("Document worker started")
-
+    outbox_task = None
     try:
+        await start_kafka_clients(producer, consumer, stop)
+        outbox_task = asyncio.create_task(outbox_loop(producer, stop))
+        logger.info("Document worker started")
         while not stop.is_set():
             batches = await consumer.getmany(timeout_ms=1000, max_records=1)
             try:
@@ -288,7 +312,8 @@ async def main() -> None:
                                 await asyncio.sleep(2)
     finally:
         stop.set()
-        await outbox_task
+        if outbox_task is not None:
+            await outbox_task
         await consumer.stop()
         await producer.stop()
         await engine.dispose()

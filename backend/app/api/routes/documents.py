@@ -28,6 +28,14 @@ from app.services.document_pipeline import (
 router = APIRouter(tags=["Documents and RAG"])
 ALLOWED = {"application/pdf": ".pdf", "text/plain": ".txt"}
 
+def _asks_about_recent_document(question: str) -> bool:
+    """Return whether the user explicitly refers to their latest uploaded file."""
+    return bool(re.search(
+        r"\b(?:recent(?:ly)? uploaded|latest uploaded|last uploaded|newly uploaded|document i (?:just )?uploaded|file i (?:just )?uploaded)\b",
+        question,
+        flags=re.IGNORECASE,
+    ))
+
 
 async def require_workspace(workspace_id: uuid.UUID, user: User, db: AsyncSession):
     membership = await db.scalar(
@@ -271,7 +279,8 @@ async def chat(
         await db.flush()
 
     count_term = _extract_count_term(payload.question)
-    if payload.document_id:
+    effective_document_id = payload.document_id
+    if effective_document_id:
         scoped_doc = await db.scalar(
             select(Document).where(
                 Document.id == payload.document_id,
@@ -281,6 +290,15 @@ async def chat(
         )
         if scoped_doc is None:
             raise HTTPException(status_code=404, detail="Selected document not found or not ready in this workspace.")
+    elif _asks_about_recent_document(payload.question):
+        latest_document = await db.scalar(
+            select(Document)
+            .where(Document.workspace_id == workspace_id, Document.status == "ready")
+            .order_by(Document.created_at.desc())
+            .limit(1)
+        )
+        if latest_document is not None:
+            effective_document_id = latest_document.id
 
     if count_term:
         ready_docs = await db.scalars(
@@ -288,7 +306,7 @@ async def chat(
             .where(
                 Document.workspace_id == workspace_id,
                 Document.status == "ready",
-                *([Document.id == payload.document_id] if payload.document_id else []),
+                *([Document.id == effective_document_id] if effective_document_id else []),
             )
             .order_by(Document.created_at.asc())
         )
@@ -362,7 +380,7 @@ async def chat(
     base_filter = (
         DocumentChunk.workspace_id == workspace_id,
         Document.status == "ready",
-        *([DocumentChunk.document_id == payload.document_id] if payload.document_id else []),
+        *([DocumentChunk.document_id == effective_document_id] if effective_document_id else []),
     )
 
     # Fetch independent semantic and lexical candidate sets, then fuse ranks in Python.
