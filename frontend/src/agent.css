@@ -30,3 +30,8 @@
 .agent-spinner{width:16px;height:16px;border:2px solid #ded8ff;border-top-color:#765bd6;border-radius:50%;animation:agent-spin .8s linear infinite}
 @keyframes agent-spin{to{transform:rotate(360deg)}}
 @media(max-width:650px){.agent-intro{padding:20px}.agent-intro h2{font-size:18px}.agent-orb{width:44px;height:44px;flex-basis:44px}.agent-form-footer{align-items:flex-start;flex-direction:column}.agent-form-footer .primary-button{width:100%}.agent-result-heading{align-items:flex-start;flex-direction:column}}
+
+.document-scope{display:grid;gap:6px;padding:10px 14px 0}
+.document-scope label{font-size:10px;font-weight:750;color:#687086}
+.document-scope select{width:100%;min-height:38px;padding:8px 10px;border:1px solid #e1e3ec;border-radius:8px;background:#fff;color:#343d50;font:inherit;font-size:11px}
+.document-scope small{font-size:9px;color:#8b91a2}
