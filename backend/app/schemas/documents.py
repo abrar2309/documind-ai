@@ -26,6 +26,7 @@ class Citation(BaseModel):
 class ChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=8000)
     conversation_id: uuid.UUID | None = None
+    document_id: uuid.UUID | None = None
 
 class ChatResponse(BaseModel):
     conversation_id: uuid.UUID
