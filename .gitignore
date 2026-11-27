@@ -52,3 +52,6 @@ storage/
 *.pem
 *.key
 secrets/
+
+# Private local audit diagnostics
+/docs/final-audit/
