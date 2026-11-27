@@ -271,12 +271,24 @@ async def chat(
         await db.flush()
 
     count_term = _extract_count_term(payload.question)
+    if payload.document_id:
+        scoped_doc = await db.scalar(
+            select(Document).where(
+                Document.id == payload.document_id,
+                Document.workspace_id == workspace_id,
+                Document.status == "ready",
+            )
+        )
+        if scoped_doc is None:
+            raise HTTPException(status_code=404, detail="Selected document not found or not ready in this workspace.")
+
     if count_term:
         ready_docs = await db.scalars(
             select(Document)
             .where(
                 Document.workspace_id == workspace_id,
                 Document.status == "ready",
+                *([Document.id == payload.document_id] if payload.document_id else []),
             )
             .order_by(Document.created_at.asc())
         )
@@ -350,6 +362,7 @@ async def chat(
     base_filter = (
         DocumentChunk.workspace_id == workspace_id,
         Document.status == "ready",
+        *([DocumentChunk.document_id == payload.document_id] if payload.document_id else []),
     )
 
     # Fetch independent semantic and lexical candidate sets, then fuse ranks in Python.
