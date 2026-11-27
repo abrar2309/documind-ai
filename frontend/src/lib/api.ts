@@ -50,7 +50,7 @@ export const api = {
   deleteDocument: (workspaceId:string,documentId:string) => request<void>(`/workspaces/${workspaceId}/documents/${documentId}`,{method:"DELETE"}),
   reindexDocument: (workspaceId:string,documentId:string) => request<DocumentItem>(`/workspaces/${workspaceId}/documents/${documentId}/reindex`,{method:"POST"}),
   exactCount: (workspaceId:string,documentId:string,term:string) => request<ExactCountResult>(`/workspaces/${workspaceId}/documents/${documentId}/exact-count?term=${encodeURIComponent(term)}`),
-  chat: (workspaceId:string,question:string,conversationId?:string) => request<ChatResult>(`/workspaces/${workspaceId}/chat`,{method:"POST",body:JSON.stringify({question,conversation_id:conversationId})}),
+  chat: (workspaceId:string,question:string,conversationId?:string,documentId?:string) => request<ChatResult>(`/workspaces/${workspaceId}/chat`,{method:"POST",body:JSON.stringify({question,conversation_id:conversationId,document_id:documentId})}),
   conversations: (workspaceId:string) => request<ConversationItem[]>(`/workspaces/${workspaceId}/conversations`),
   messages: (workspaceId:string,conversationId:string) => request<MessageItem[]>(`/workspaces/${workspaceId}/conversations/${conversationId}/messages`),
   agent: (workspaceId:string,task:string,conversationId?:string) => request<AgentResult>(`/workspaces/${workspaceId}/agent`,{method:"POST",body:JSON.stringify({task,conversation_id:conversationId})})
