@@ -1,78 +1,74 @@
-# DocuMind — AI Document Intelligence Platform
+# DocuMind AI — Document Intelligence Platform
 
-Multi-tenant document intelligence built with FastAPI, PostgreSQL/pgvector, Ollama and React/TypeScript.
+A workspace-scoped document intelligence application built with React/TypeScript, FastAPI, PostgreSQL + pgvector, Redis, Kafka, a background document worker and Ollama-based local inference.
 
-## Stage 2 capabilities
+## What it does
 
-- Workspace-scoped PDF and UTF-8 TXT upload (20 MB limit).
-- PDF/TXT extraction, overlapping chunks and page metadata.
-- Local semantic embeddings through Ollama `all-minilm` (384 dimensions).
-- Local grounded answer generation through Ollama `qwen3:1.7b`.
-- PostgreSQL/pgvector cosine retrieval plus PostgreSQL full-text candidate retrieval.
-- Weighted hybrid ranking and duplicate-excerpt suppression.
-- Workspace-filtered citations with document, page, excerpt and relevance score.
-- Persistent conversations and message history.
-- Document-wide exact term/phrase counting with per-page counts.
-- Re-index endpoint that generates new vectors before replacing existing chunks.
-- Workspace membership checks and viewer restrictions on upload/delete/re-index.
+- User authentication and workspace-scoped access.
+- PDF and UTF-8 TXT upload (20 MiB maximum).
+- Asynchronous document ingestion through a transactional outbox, Kafka and a worker.
+- Text extraction, overlapping chunking, 384-dimensional embeddings and vector persistence.
+- Hybrid semantic (pgvector) + lexical (PostgreSQL full-text) retrieval.
+- Grounded question answering with source citation metadata.
+- Persistent conversations, document re-indexing and document-wide exact term/phrase counting.
+- React frontend served by Nginx; API requests are proxied to FastAPI.
 
-## Local configuration
+## Local development
 
-Keep your existing `.env` values. The local AI defaults are:
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8000
+- API docs: http://localhost:8000/docs
 
-```env
-EMBEDDING_PROVIDER=ollama
-CHAT_PROVIDER=ollama
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_EMBEDDING_MODEL=all-minilm
-OLLAMA_CHAT_MODEL=qwen3:1.7b
-EMBEDDING_DIMENSIONS=384
-```
+The local Docker Compose topology defines six containers: frontend, backend, PostgreSQL, Redis, Kafka and document worker. In the documented Windows setup, Ollama runs on the host and containers reach it through `host.docker.internal:11434`.
 
-Ollama must be running on the Windows host with both models pulled. The Docker backend reaches it through `host.docker.internal`.
+Configured local models are `all-minilm` for embeddings and `qwen3:1.7b` for chat. Confirm model availability on the machine with `ollama list`; configuration does not prove that a model is installed.
 
 ## Start and verify
 
+Run from the directory containing the active `docker-compose.yml`:
+
 ```powershell
 docker compose config --quiet
-docker compose up -d --build backend frontend
+docker compose up -d --build
 docker compose ps
 Invoke-RestMethod http://localhost:8000/health
 Invoke-RestMethod http://localhost:8000/health/db
+Invoke-WebRequest http://localhost:3000/ -UseBasicParsing
 ```
 
-Frontend: http://localhost:3000
-Backend API: http://localhost:8000
-API documentation: http://localhost:8000/docs
-
-## API
-
-- `POST /api/v1/workspaces/{workspace_id}/documents`
-- `GET /api/v1/workspaces/{workspace_id}/documents`
-- `DELETE /api/v1/workspaces/{workspace_id}/documents/{document_id}`
-- `POST /api/v1/workspaces/{workspace_id}/documents/{document_id}/reindex`
-- `GET /api/v1/workspaces/{workspace_id}/documents/{document_id}/exact-count?term=ball`
-- `POST /api/v1/workspaces/{workspace_id}/chat`
-- `GET /api/v1/workspaces/{workspace_id}/conversations`
-- `GET /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages`
-
-## Tests
+Run backend tests only after confirming the test harness points to its dedicated test database:
 
 ```powershell
-docker compose exec -T backend python -m compileall -q app
-docker compose exec -T backend python -m pytest -q
-Set-Location frontend
+docker exec -e TRUSTED_HOSTS=localhost,127.0.0.1,testserver document-intelligence-backend python -m pytest -q
+```
+
+Frontend production build (from `frontend`):
+
+```powershell
 npm.cmd run build
 ```
 
-The existing test harness uses a separate `document_intelligence_test` database. Inspect `backend/tests/conftest.py` before running tests: it recreates tables in that test database only, not the development database.
+## Engineering documentation
 
-## Known boundaries
+The full engineering handbook is in **[docs/README.md](docs/README.md)**.
 
-- Scanned PDFs require OCR; OCR is not included in this stage.
-- Exact counting is based on extractable PDF/TXT text. PDF page numbers are returned where available.
-- Upload/indexing remains synchronous; a background worker is a later-stage concern.
-- Ollama inference speed depends on local CPU/GPU and model size.
-- Production hardening, cloud deployment, CI/CD, agents/tools, Redis/Kafka and full observability are later stages.
+It includes:
+- High-Level Design (HLD) and Low-Level Design (LLD)
+- System design, data model and API reference
+- Ingestion and RAG architecture, sequence flows and design trade-offs
+- Test evidence register and browser end-to-end test plan
+- AWS deployment guide, production security checklist and operations runbook
+- Demo recording guide (add/complete after the final browser acceptance run)
 
-Never commit `.env`, API keys, passwords or tokens. Do not use destructive volume reset commands.
+## Important limitations and deployment status
+
+- Scanned-PDF OCR is not implemented.
+- Supported upload formats are PDF and UTF-8 TXT.
+- Local Ollama inference performance depends on host CPU/GPU and available memory.
+- The local Kafka Compose setup is a single broker/controller and is not a highly available production cluster.
+- AWS deployment instructions are documentation only. No public AWS deployment or live demo URL is claimed as completed.
+- The recorded local test results and their scope/limitations are documented in [Testing & Evidence](docs/testing/TESTING_AND_EVIDENCE.md).
+
+## Security
+
+Never commit `.env`, API keys, passwords, JWTs, private keys or real user documents. Do not expose PostgreSQL, Redis, Kafka or Ollama directly to the public internet. Avoid destructive volume-reset commands; back up before database or storage changes.
